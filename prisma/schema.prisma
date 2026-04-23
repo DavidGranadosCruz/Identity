@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IdentityPackStatus {
+  draft
+  analyzing
+  ready
+  failed
+}
+
+enum AnalysisStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum KeepRecommendation {
+  keep
+  replace
+}
+
+enum GenerationStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
+enum GenerationVariantType {
+  faithful
+  editorial
+  cinematic
+}
+
+enum JobType {
+  analyze_identity_image
+  analyze_reference_image
+  generate_recreation
+}
+
+enum JobStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String
+  name            String
+  avatarUrl       String?
+  emailVerified   DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+  identityPacks   IdentityPack[]
+  referenceImages ReferenceImage[]
+  generations     Generation[]
+  jobs            Job[]
+  settings        UserSettings?
+  auditLogs       AuditLog[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model IdentityPack {
+  id          String              @id @default(cuid())
+  userId      String
+  name        String
+  status      IdentityPackStatus  @default(draft)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images      IdentityPackImage[]
+  profile     IdentityProfile?
+  generations Generation[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, status])
+}
+
+model IdentityPackImage {
+  id                 String              @id @default(cuid())
+  packId             String
+  storagePath        String
+  originalFilename   String
+  mimeType           String
+  width              Int
+  height             Int
+  fileSize           Int
+  analysisStatus     AnalysisStatus      @default(pending)
+  score              Int?
+  keepRecommendation KeepRecommendation?
+  analysisJson       Json?
+  identityClusterId  String?
+  identityConsistencyScore Int?
+  isIdentityValid    Boolean?
+  identityDecisionReason String?
+  errorMessage       String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  pack               IdentityPack        @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@index([packId, createdAt])
+  @@index([analysisStatus, updatedAt])
+}
+
+model ReferenceImage {
+  id               String         @id @default(cuid())
+  userId           String
+  storagePath      String
+  originalFilename String
+  mimeType         String
+  width            Int
+  height           Int
+  fileSize         Int
+  analysisStatus   AnalysisStatus @default(pending)
+  analysisJson     Json?
+  errorMessage     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations      Generation[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([analysisStatus, updatedAt])
+}
+
+model Generation {
+  id                         String              @id @default(cuid())
+  userId                     String
+  packId                     String
+  referenceImageId           String
+  title                      String?
+  status                     GenerationStatus    @default(queued)
+  referenceFidelity          Int
+  identityStrength           Int
+  promptJson                 Json?
+  selectedIdentityImagesJson Json?
+  provider                   String?
+  providerModel              String?
+  errorMessage               String?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  user                       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pack                       IdentityPack        @relation(fields: [packId], references: [id], onDelete: Cascade)
+  referenceImage             ReferenceImage      @relation(fields: [referenceImageId], references: [id], onDelete: Cascade)
+  variants                   GenerationVariant[]
+  jobs                       Job[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, status, updatedAt])
+  @@index([packId])
+  @@index([referenceImageId])
+}
+
+model GenerationVariant {
+  id           String                @id @default(cuid())
+  generationId String
+  variantType  GenerationVariantType
+  storagePath  String
+  mimeType     String
+  width        Int
+  height       Int
+  fileSize     Int
+  identitySimilarityScore Int?
+  referenceCompositionScore Int?
+  backgroundPreservationScore Int?
+  poseMatchScore Int?
+  overallAcceptanceScore Int?
+  accepted     Boolean              @default(false)
+  rejectionReason String?
+  metadataJson Json?
+  createdAt    DateTime              @default(now())
+  generation   Generation            @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@index([generationId, createdAt])
+}
+
+model IdentityProfile {
+  id               String         @id @default(cuid())
+  packId           String         @unique
+  status           AnalysisStatus @default(pending)
+  minRequiredImages Int           @default(4)
+  validImageCount  Int            @default(0)
+  rejectedImageCount Int          @default(0)
+  consistencyScore Int?
+  primaryClusterId String?
+  centroidVectorJson Json?
+  profileJson      Json?
+  errorMessage     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  pack             IdentityPack   @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+}
+
+model Job {
+  id           String      @id @default(cuid())
+  type         JobType
+  status       JobStatus   @default(pending)
+  userId       String?
+  generationId String?
+  payloadJson  Json
+  resultJson   Json?
+  errorMessage String?
+  attempts     Int         @default(0)
+  maxAttempts  Int         @default(3)
+  runAt        DateTime    @default(now())
+  lockedAt     DateTime?
+  lockedBy     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  generation   Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([status, runAt, createdAt])
+  @@index([type, status])
+  @@index([generationId])
+  @@index([userId])
+}
+
+model UserSettings {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  defaultFidelity         Int      @default(80)
+  defaultIdentityStrength Int      @default(80)
+  watermarkEnabled        Boolean  @default(false)
+  themePreference         String   @default("system")
+  languagePreference      String   @default("es")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String?
+  payloadJson Json?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+}
+

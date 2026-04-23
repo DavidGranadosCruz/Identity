@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f9fc;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #f3f6fb;
+  --border: #d9e2ee;
+  --input: #ffffff;
+  --input-border: #c9d5e5;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #1f2937;
+  --muted: #64748b;
+  --muted-foreground: #475569;
+  --danger: #dc2626;
+  --success: #059669;
+  --warning: #d97706;
+  --focus-ring: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+:root[data-theme="dark"] {
+  --background: #090c12;
+  --foreground: #e5edf9;
+  --surface: #121821;
+  --surface-muted: #0f141c;
+  --border: #223042;
+  --input: #111a26;
+  --input-border: #2a3b52;
+  --primary: #4f8cff;
+  --primary-foreground: #f8fbff;
+  --secondary: #dbeafe;
+  --muted: #9ba8bc;
+  --muted-foreground: #c1cde0;
+  --danger: #f87171;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --focus-ring: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1100px 820px at 8% -30%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 62%),
+    radial-gradient(1300px 920px at 96% 120%, color-mix(in srgb, var(--foreground) 10%, transparent), transparent 64%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.011em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--foreground);
+}
+
+a {
+  color: inherit;
+}
+
+.glass-surface {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 18px 60px color-mix(in srgb, var(--foreground) 16%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 40%, transparent);
+}
+
+.surface-card {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  box-shadow: 0 16px 56px color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.focus-ring,
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

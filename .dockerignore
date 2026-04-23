@@ -1,0 +1,10 @@
+﻿node_modules
+.next
+.git
+.gitignore
+coverage
+.vscode
+*.log
+.env
+.env.local
+pnpm-debug.log

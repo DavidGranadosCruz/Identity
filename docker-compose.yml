@@ -1,0 +1,127 @@
+services:
+  identity-data:
+    image: postgres:16-alpine
+    container_name: identity-data
+    environment:
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: identity
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d identity"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  identity-storage:
+    image: minio/minio:RELEASE.2025-02-03T21-03-04Z
+    container_name: identity-storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  identity-storage-init:
+    image: minio/mc:RELEASE.2025-04-08T15-39-49Z
+    container_name: identity-storage-init
+    depends_on:
+      identity-storage:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://identity-storage:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+      mc mb --ignore-existing local/$${MINIO_BUCKET_UPLOADS};
+      mc mb --ignore-existing local/$${MINIO_BUCKET_GENERATIONS};
+      echo 'minio buckets ready';
+      "
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_UPLOADS: ${MINIO_BUCKET_UPLOADS:-identity-uploads}
+      MINIO_BUCKET_GENERATIONS: ${MINIO_BUCKET_GENERATIONS:-identity-generations}
+
+  identity-face:
+    image: ${FACEFUSION_IMAGE:-facefusion/facefusion:3.6.0-cpu}
+    container_name: ${FACEFUSION_CONTAINER_NAME:-identity-face}
+    command: ["sh", "-c", "while true; do sleep 3600; done"]
+    volumes:
+      - facefusion_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cd /facefusion && python facefusion.py --version >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  identity-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: identity-web
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    command: sh -c "pnpm db:generate && pnpm db:migrate:deploy && pnpm start"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      identity-data:
+        condition: service_healthy
+      identity-storage:
+        condition: service_healthy
+      identity-storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  identity-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: identity-worker
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      WORKER_HEALTH_PORT: 3001
+    command: sh -c "pnpm db:generate && pnpm db:migrate:deploy && pnpm worker"
+    depends_on:
+      identity-data:
+        condition: service_healthy
+      identity-storage:
+        condition: service_healthy
+      identity-storage-init:
+        condition: service_completed_successfully
+      identity-face:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - facefusion_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  postgres_data:
+  minio_data:
+  facefusion_data:
